@@ -8,14 +8,20 @@ import android.database.sqlite.SQLiteOpenHelper
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
@@ -25,7 +31,23 @@ import java.util.Locale
 
 class MainActivity : ComponentActivity() {
 
-    // --- Data model simples ---
+    // =========================
+    // CORES DO TEMA
+    // =========================
+
+    private val StudyBlue = Color(0xFF5B7BFE)
+    private val StudyPurple = Color(0xFF8E97FD)
+    private val BackgroundTop = Color(0xFFF4F7FF)
+    private val BackgroundBottom = Color(0xFFE9EEFF)
+    private val CardColor = Color.White
+    private val TextDark = Color(0xFF1F2937)
+    private val SoftGray = Color(0xFF6B7280)
+    private val Danger = Color(0xFFE53935)
+
+    // =========================
+    // MODEL
+    // =========================
+
     data class Note(
         val id: Long? = null,
         val title: String,
@@ -34,7 +56,10 @@ class MainActivity : ComponentActivity() {
         val tags: List<String>
     )
 
-    // --- Helper SQLite (dentro da MainActivity para manter "uma única activity") ---
+    // =========================
+    // SQLITE
+    // =========================
+
     class DBHelper(context: Context) :
         SQLiteOpenHelper(context, "app.db", null, 2) {
 
@@ -52,12 +77,10 @@ class MainActivity : ComponentActivity() {
             )
         }
 
-        // Date <-> Long
         private fun fromDate(date: Long): Long {
             return date
         }
 
-        // List<String> <-> JSON String
         private fun fromList(list: List<String>): String {
             return JSONArray(list).toString()
         }
@@ -69,29 +92,44 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        override fun onUpgrade(
+            db: SQLiteDatabase,
+            oldVersion: Int,
+            newVersion: Int
+        ) {
             db.execSQL("DROP TABLE IF EXISTS notes")
             onCreate(db)
         }
 
         fun insertNote(note: Note): Long {
+
             val cv = ContentValues().apply {
                 put("title", note.title)
                 put("content", note.content)
                 put("date", fromDate(note.date))
                 put("tags", fromList(note.tags))
             }
-            return writableDatabase.insert("notes", null, cv)
+
+            return writableDatabase.insert(
+                "notes",
+                null,
+                cv
+            )
         }
 
         fun updateNote(note: Note): Int {
-            requireNotNull(note.id) { "ID não pode ser nulo para update" }
+
+            requireNotNull(note.id) {
+                "ID não pode ser nulo para update"
+            }
+
             val cv = ContentValues().apply {
                 put("title", note.title)
                 put("content", note.content)
                 put("date", fromDate(note.date))
                 put("tags", fromList(note.tags))
             }
+
             return writableDatabase.update(
                 "notes",
                 cv,
@@ -101,6 +139,7 @@ class MainActivity : ComponentActivity() {
         }
 
         fun deleteNote(id: Long): Int {
+
             return writableDatabase.delete(
                 "notes",
                 "id=?",
@@ -109,18 +148,24 @@ class MainActivity : ComponentActivity() {
         }
 
         fun getAllNotes(): List<Note> {
+
             val list = mutableListOf<Note>()
+
             val c: Cursor = readableDatabase.rawQuery(
                 "SELECT id, title, content, date, tags FROM notes ORDER BY id DESC",
                 null
             )
+
             c.use { cur ->
+
                 val idIdx = cur.getColumnIndexOrThrow("id")
                 val titleIdx = cur.getColumnIndexOrThrow("title")
                 val contentIdx = cur.getColumnIndexOrThrow("content")
                 val dateIdx = cur.getColumnIndexOrThrow("date")
                 val tagsIdx = cur.getColumnIndexOrThrow("tags")
+
                 while (cur.moveToNext()) {
+
                     list.add(
                         Note(
                             id = cur.getLong(idIdx),
@@ -132,39 +177,76 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+
             return list
         }
     }
 
+    // =========================
+    // ON CREATE
+    // =========================
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         val db = DBHelper(this)
 
         setContent {
+
             MaterialTheme {
-                Surface(Modifier.fillMaxSize()) {
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    BackgroundTop,
+                                    BackgroundBottom
+                                )
+                            )
+                        )
+                ) {
                     NotesScreen(dbHelper = db)
                 }
             }
         }
     }
 
-    // --- UI Compose + lógica CRUD ---
+    // =========================
+    // TELA PRINCIPAL
+    // =========================
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun NotesScreen(dbHelper: DBHelper) {
-        var notes by remember { mutableStateOf(dbHelper.getAllNotes()) }
 
-        // Estados para criação/edição
-        var title by remember { mutableStateOf(TextFieldValue("")) }
-        var content by remember { mutableStateOf(TextFieldValue("")) }
-        var dateText by remember { mutableStateOf(TextFieldValue("")) }
-        var tagsText by remember { mutableStateOf(TextFieldValue("")) }
+        var notes by remember {
+            mutableStateOf(dbHelper.getAllNotes())
+        }
 
-        // Estado para saber se estamos editando algo
-        var editingId by remember { mutableStateOf<Long?>(null) }
+        var title by remember {
+            mutableStateOf(TextFieldValue(""))
+        }
+
+        var content by remember {
+            mutableStateOf(TextFieldValue(""))
+        }
+
+        var dateText by remember {
+            mutableStateOf(TextFieldValue(""))
+        }
+
+        var tagsText by remember {
+            mutableStateOf(TextFieldValue(""))
+        }
+
+        var editingId by remember {
+            mutableStateOf<Long?>(null)
+        }
 
         fun clearFields() {
+
             title = TextFieldValue("")
             content = TextFieldValue("")
             dateText = TextFieldValue("")
@@ -173,146 +255,305 @@ class MainActivity : ComponentActivity() {
         }
 
         Scaffold(
+            containerColor = Color.Transparent,
+
             topBar = {
+
                 TopAppBar(
+
                     title = {
-                        Text(if (editingId == null) "App de lista de estudos" else "Editando #$editingId")
-                    }
+
+                        Column {
+
+                            Text(
+                                text = "Study Planner",
+                                fontWeight = FontWeight.Bold,
+                                color = TextDark
+                            )
+
+                            Text(
+                                text =
+                                    if (editingId == null)
+                                        "Organize seus estudos"
+                                    else
+                                        "Editando anotação",
+
+                                style = MaterialTheme.typography.bodySmall,
+                                color = SoftGray
+                            )
+                        }
+                    },
+
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent
+                    )
                 )
             }
         ) { padding ->
+
             Column(
-                Modifier
+                modifier = Modifier
                     .padding(padding)
                     .padding(16.dp)
                     .fillMaxSize()
             ) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Matéria") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = content,
-                    onValueChange = { content = it },
-                    label = { Text("Conteúdo") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(12.dp))
-                Spacer(Modifier.height(8.dp))
 
-                OutlinedTextField(
-                    value = dateText,
-                    onValueChange = { dateText = it },
-                    label = { Text("Data (dd/mm/aaaa)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                // =========================
+                // FORMULÁRIO
+                // =========================
 
-                Spacer(Modifier.height(8.dp))
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = CardColor
+                    ),
 
-                OutlinedTextField(
-                    value = tagsText,
-                    onValueChange = { tagsText = it },
-                    label = { Text("Tarefas (separadas por vírgula)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    shape = RoundedCornerShape(24.dp),
 
-                Row {
-                    Button(
-                        onClick = {
-                            val formatter = SimpleDateFormat(
-                                "dd/MM/yyyy",
-                                Locale.getDefault()
-                            )
+                    elevation = CardDefaults.cardElevation(
+                        defaultElevation = 8.dp
+                    )
+                ) {
 
-                            val date = try {
-                                formatter.parse(dateText.text)?.time ?: System.currentTimeMillis()
-                            } catch (e: Exception) {
-                                System.currentTimeMillis()
-                            }
-
-                            val tags = tagsText.text
-                                .split(",")
-                                .map { it.trim() }
-                                .filter { it.isNotEmpty() }
-                            val t = title.text.trim()
-                            val c = content.text.trim()
-                            if (t.isEmpty() || c.isEmpty()) return@Button
-
-                            if (editingId == null) {
-                                // CREATE
-                                dbHelper.insertNote(
-                                    Note(
-                                        title = t,
-                                        content = c,
-                                        date = date,
-                                        tags = tags
-                                    )
-                                )
-                            } else {
-                                // UPDATE
-                                dbHelper.updateNote(
-                                    Note(
-                                        id = editingId,
-                                        title = t,
-                                        content = c,
-                                        date = date,
-                                        tags = tags
-                                    )
-                                )
-                            }
-
-                            notes = dbHelper.getAllNotes()
-                            clearFields()
-
-                        }
+                    Column(
+                        modifier = Modifier.padding(20.dp)
                     ) {
-                        Text(if (editingId == null) "Salvar" else "Atualizar")
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    OutlinedButton(onClick = { clearFields() }) {
-                        Text("Limpar")
+
+                        Text(
+                            text = "Nova sessão de estudo",
+
+                            style = MaterialTheme.typography.titleLarge,
+
+                            fontWeight = FontWeight.Bold,
+
+                            color = TextDark
+                        )
+
+                        Spacer(Modifier.height(16.dp))
+
+                        OutlinedTextField(
+                            value = title,
+                            onValueChange = { title = it },
+
+                            label = {
+                                Text("Matéria")
+                            },
+
+                            modifier = Modifier.fillMaxWidth(),
+
+                            shape = RoundedCornerShape(16.dp)
+                        )
+
+                        Spacer(Modifier.height(10.dp))
+
+                        OutlinedTextField(
+                            value = content,
+                            onValueChange = { content = it },
+
+                            label = {
+                                Text("Conteúdo")
+                            },
+
+                            modifier = Modifier.fillMaxWidth(),
+
+                            shape = RoundedCornerShape(16.dp)
+                        )
+
+                        Spacer(Modifier.height(10.dp))
+
+                        OutlinedTextField(
+                            value = dateText,
+                            onValueChange = { dateText = it },
+
+                            label = {
+                                Text("Data (dd/mm/aaaa)")
+                            },
+
+                            modifier = Modifier.fillMaxWidth(),
+
+                            shape = RoundedCornerShape(16.dp)
+                        )
+
+                        Spacer(Modifier.height(10.dp))
+
+                        OutlinedTextField(
+                            value = tagsText,
+                            onValueChange = { tagsText = it },
+
+                            label = {
+                                Text("Tarefas")
+                            },
+
+                            modifier = Modifier.fillMaxWidth(),
+
+                            shape = RoundedCornerShape(16.dp)
+                        )
+
+                        Spacer(Modifier.height(18.dp))
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+
+                            Button(
+
+                                onClick = {
+
+                                    val formatter = SimpleDateFormat(
+                                        "dd/MM/yyyy",
+                                        Locale.getDefault()
+                                    )
+
+                                    val date = try {
+
+                                        formatter.parse(
+                                            dateText.text
+                                        )?.time
+                                            ?: System.currentTimeMillis()
+
+                                    } catch (e: Exception) {
+
+                                        System.currentTimeMillis()
+                                    }
+
+                                    val tags = tagsText.text
+                                        .split(",")
+                                        .map { it.trim() }
+                                        .filter { it.isNotEmpty() }
+
+                                    val t = title.text.trim()
+                                    val c = content.text.trim()
+
+                                    if (t.isEmpty() || c.isEmpty()) {
+                                        return@Button
+                                    }
+
+                                    if (editingId == null) {
+
+                                        dbHelper.insertNote(
+
+                                            Note(
+                                                title = t,
+                                                content = c,
+                                                date = date,
+                                                tags = tags
+                                            )
+                                        )
+
+                                    } else {
+
+                                        dbHelper.updateNote(
+
+                                            Note(
+                                                id = editingId,
+                                                title = t,
+                                                content = c,
+                                                date = date,
+                                                tags = tags
+                                            )
+                                        )
+                                    }
+
+                                    notes = dbHelper.getAllNotes()
+
+                                    clearFields()
+                                },
+
+                                shape = RoundedCornerShape(16.dp),
+
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = StudyBlue
+                                )
+                            ) {
+
+                                Text(
+                                    if (editingId == null)
+                                        "Salvar"
+                                    else
+                                        "Atualizar"
+                                )
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    clearFields()
+                                },
+
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+
+                                Text("Limpar")
+                            }
+                        }
                     }
                 }
 
-                Spacer(Modifier.height(16.dp))
-                HorizontalDivider(Modifier, DividerDefaults.Thickness, DividerDefaults.color)
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(18.dp))
+
+                HorizontalDivider()
+
+                Spacer(Modifier.height(12.dp))
+
+                // =========================
+                // LISTA
+                // =========================
 
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 80.dp)
+                    contentPadding = PaddingValues(
+                        bottom = 80.dp
+                    )
                 ) {
-                    items(notes, key = { it.id ?: -1 }) { note ->
+
+                    items(
+                        notes,
+                        key = { it.id ?: -1 }
+                    ) { note ->
+
                         NoteItem(
                             note = note,
+
                             onClick = {
-                                // carregar no form para edição
+
                                 editingId = note.id
+
                                 title = TextFieldValue(note.title)
+
                                 content = TextFieldValue(note.content)
+
                                 dateText = TextFieldValue(
                                     SimpleDateFormat(
                                         "dd/MM/yyyy",
                                         Locale.getDefault()
                                     ).format(Date(note.date))
                                 )
-                                tagsText = TextFieldValue(note.tags.joinToString(", "))
+
+                                tagsText = TextFieldValue(
+                                    note.tags.joinToString(", ")
+                                )
                             },
+
                             onDelete = { id ->
+
                                 dbHelper.deleteNote(id)
+
                                 notes = dbHelper.getAllNotes()
-                                if (editingId == id) clearFields()
+
+                                if (editingId == id) {
+                                    clearFields()
+                                }
                             }
                         )
-                        Divider()
+
+                        Spacer(Modifier.height(10.dp))
                     }
                 }
             }
         }
     }
+
+    // =========================
+    // ITEM DA LISTA
+    // =========================
 
     @Composable
     private fun NoteItem(
@@ -320,32 +561,111 @@ class MainActivity : ComponentActivity() {
         onClick: () -> Unit,
         onDelete: (Long) -> Unit
     ) {
+
         val formattedDate = SimpleDateFormat(
             "dd/MM/yyyy",
             Locale.getDefault()
         ).format(Date(note.date))
-        Column(
-            Modifier
+
+        Card(
+            modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp)
-                .clickable { onClick() }
+                .clickable {
+                    onClick()
+                },
+
+            shape = RoundedCornerShape(22.dp),
+
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = 6.dp
+            ),
+
+            colors = CardDefaults.cardColors(
+                containerColor = CardColor
+            )
         ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(text = note.title, style = MaterialTheme.typography.titleMedium)
-                if (note.id != null) {
-                    TextButton(onClick = { onDelete(note.id) }) {
-                        Text("Excluir")
+
+            Column(
+                modifier = Modifier.padding(18.dp)
+            ) {
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+
+                    horizontalArrangement = Arrangement.SpaceBetween,
+
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+
+                    Column {
+
+                        Text(
+                            text = note.title,
+
+                            style = MaterialTheme.typography.titleLarge,
+
+                            fontWeight = FontWeight.Bold,
+
+                            color = TextDark
+                        )
+
+                        Spacer(Modifier.height(4.dp))
+
+                        Text(
+                            text = "📅 $formattedDate",
+                            color = SoftGray
+                        )
+                    }
+
+                    if (note.id != null) {
+
+                        TextButton(
+                            onClick = {
+                                onDelete(note.id)
+                            }
+                        ) {
+
+                            Text(
+                                "Excluir",
+                                color = Danger
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                Text(
+                    text = note.content,
+
+                    style = MaterialTheme.typography.bodyLarge,
+
+                    color = TextDark
+                )
+
+                if (note.tags.isNotEmpty()) {
+
+                    Spacer(Modifier.height(14.dp))
+
+                    Text(
+                        text = "Tarefas",
+
+                        fontWeight = FontWeight.Bold,
+
+                        color = StudyBlue
+                    )
+
+                    Spacer(Modifier.height(6.dp))
+
+                    note.tags.forEach { tag ->
+
+                        Text(
+                            text = "• $tag",
+                            color = SoftGray
+                        )
                     }
                 }
             }
-            Spacer(Modifier.height(4.dp))
-            Text(text = note.content, style = MaterialTheme.typography.bodyMedium)
-
-            Spacer(Modifier.height(4.dp))
-            Text("Data: $formattedDate")
-
-            Spacer(Modifier.height(4.dp))
-            Text("Tarefas: ${note.tags.joinToString()}")
         }
     }
 }
