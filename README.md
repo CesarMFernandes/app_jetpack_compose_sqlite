@@ -8,3 +8,7 @@
   <li>Delete</li>
   <li>Alter</li>
 </ul>
+
+<video controls>
+  <source src="sqlitevideo.mp4" type="video/mp4">
+</video>
