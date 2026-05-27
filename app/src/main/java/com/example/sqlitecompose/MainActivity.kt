@@ -18,6 +18,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import org.json.JSONArray
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
 
@@ -25,12 +29,14 @@ class MainActivity : ComponentActivity() {
     data class Note(
         val id: Long? = null,
         val title: String,
-        val content: String
+        val content: String,
+        val date: Long,
+        val tags: List<String>
     )
 
     // --- Helper SQLite (dentro da MainActivity para manter "uma única activity") ---
     class DBHelper(context: Context) :
-        SQLiteOpenHelper(context, "app.db", null, 1) {
+        SQLiteOpenHelper(context, "app.db", null, 2) {
 
         override fun onCreate(db: SQLiteDatabase) {
             db.execSQL(
@@ -38,10 +44,29 @@ class MainActivity : ComponentActivity() {
                 CREATE TABLE notes(
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     title TEXT NOT NULL,
-                    content TEXT NOT NULL
+                    content TEXT NOT NULL,
+                    date INTEGER NOT NULL,
+                    tags TEXT NOT NULL
                 )
                 """.trimIndent()
             )
+        }
+
+        // Date <-> Long
+        private fun fromDate(date: Long): Long {
+            return date
+        }
+
+        // List<String> <-> JSON String
+        private fun fromList(list: List<String>): String {
+            return JSONArray(list).toString()
+        }
+
+        private fun toList(json: String): List<String> {
+            val array = JSONArray(json)
+            return List(array.length()) { index ->
+                array.getString(index)
+            }
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -53,6 +78,8 @@ class MainActivity : ComponentActivity() {
             val cv = ContentValues().apply {
                 put("title", note.title)
                 put("content", note.content)
+                put("date", fromDate(note.date))
+                put("tags", fromList(note.tags))
             }
             return writableDatabase.insert("notes", null, cv)
         }
@@ -62,6 +89,8 @@ class MainActivity : ComponentActivity() {
             val cv = ContentValues().apply {
                 put("title", note.title)
                 put("content", note.content)
+                put("date", fromDate(note.date))
+                put("tags", fromList(note.tags))
             }
             return writableDatabase.update(
                 "notes",
@@ -82,19 +111,23 @@ class MainActivity : ComponentActivity() {
         fun getAllNotes(): List<Note> {
             val list = mutableListOf<Note>()
             val c: Cursor = readableDatabase.rawQuery(
-                "SELECT id, title, content FROM notes ORDER BY id DESC",
+                "SELECT id, title, content, date, tags FROM notes ORDER BY id DESC",
                 null
             )
             c.use { cur ->
                 val idIdx = cur.getColumnIndexOrThrow("id")
                 val titleIdx = cur.getColumnIndexOrThrow("title")
                 val contentIdx = cur.getColumnIndexOrThrow("content")
+                val dateIdx = cur.getColumnIndexOrThrow("date")
+                val tagsIdx = cur.getColumnIndexOrThrow("tags")
                 while (cur.moveToNext()) {
                     list.add(
                         Note(
                             id = cur.getLong(idIdx),
                             title = cur.getString(titleIdx),
-                            content = cur.getString(contentIdx)
+                            content = cur.getString(contentIdx),
+                            date = cur.getLong(dateIdx),
+                            tags = toList(cur.getString(tagsIdx))
                         )
                     )
                 }
@@ -125,6 +158,8 @@ class MainActivity : ComponentActivity() {
         // Estados para criação/edição
         var title by remember { mutableStateOf(TextFieldValue("")) }
         var content by remember { mutableStateOf(TextFieldValue("")) }
+        var dateText by remember { mutableStateOf(TextFieldValue("")) }
+        var tagsText by remember { mutableStateOf(TextFieldValue("")) }
 
         // Estado para saber se estamos editando algo
         var editingId by remember { mutableStateOf<Long?>(null) }
@@ -132,6 +167,8 @@ class MainActivity : ComponentActivity() {
         fun clearFields() {
             title = TextFieldValue("")
             content = TextFieldValue("")
+            dateText = TextFieldValue("")
+            tagsText = TextFieldValue("")
             editingId = null
         }
 
@@ -139,7 +176,7 @@ class MainActivity : ComponentActivity() {
             topBar = {
                 TopAppBar(
                     title = {
-                        Text(if (editingId == null) "Notas (SQLite + Compose)" else "Editando #$editingId")
+                        Text(if (editingId == null) "App de lista de estudos" else "Editando #$editingId")
                     }
                 )
             }
@@ -153,7 +190,7 @@ class MainActivity : ComponentActivity() {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Título") },
+                    label = { Text("Matéria") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(8.dp))
@@ -164,25 +201,72 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = dateText,
+                    onValueChange = { dateText = it },
+                    label = { Text("Data (dd/mm/aaaa)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = tagsText,
+                    onValueChange = { tagsText = it },
+                    label = { Text("Tarefas (separadas por vírgula)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
 
                 Row {
                     Button(
                         onClick = {
+                            val formatter = SimpleDateFormat(
+                                "dd/MM/yyyy",
+                                Locale.getDefault()
+                            )
+
+                            val date = try {
+                                formatter.parse(dateText.text)?.time ?: System.currentTimeMillis()
+                            } catch (e: Exception) {
+                                System.currentTimeMillis()
+                            }
+
+                            val tags = tagsText.text
+                                .split(",")
+                                .map { it.trim() }
+                                .filter { it.isNotEmpty() }
                             val t = title.text.trim()
                             val c = content.text.trim()
                             if (t.isEmpty() || c.isEmpty()) return@Button
 
                             if (editingId == null) {
                                 // CREATE
-                                dbHelper.insertNote(Note(title = t, content = c))
+                                dbHelper.insertNote(
+                                    Note(
+                                        title = t,
+                                        content = c,
+                                        date = date,
+                                        tags = tags
+                                    )
+                                )
                             } else {
                                 // UPDATE
                                 dbHelper.updateNote(
-                                    Note(id = editingId, title = t, content = c)
+                                    Note(
+                                        id = editingId,
+                                        title = t,
+                                        content = c,
+                                        date = date,
+                                        tags = tags
+                                    )
                                 )
                             }
+
                             notes = dbHelper.getAllNotes()
                             clearFields()
+
                         }
                     ) {
                         Text(if (editingId == null) "Salvar" else "Atualizar")
@@ -209,6 +293,13 @@ class MainActivity : ComponentActivity() {
                                 editingId = note.id
                                 title = TextFieldValue(note.title)
                                 content = TextFieldValue(note.content)
+                                dateText = TextFieldValue(
+                                    SimpleDateFormat(
+                                        "dd/MM/yyyy",
+                                        Locale.getDefault()
+                                    ).format(Date(note.date))
+                                )
+                                tagsText = TextFieldValue(note.tags.joinToString(", "))
                             },
                             onDelete = { id ->
                                 dbHelper.deleteNote(id)
@@ -229,6 +320,10 @@ class MainActivity : ComponentActivity() {
         onClick: () -> Unit,
         onDelete: (Long) -> Unit
     ) {
+        val formattedDate = SimpleDateFormat(
+            "dd/MM/yyyy",
+            Locale.getDefault()
+        ).format(Date(note.date))
         Column(
             Modifier
                 .fillMaxWidth()
@@ -245,6 +340,12 @@ class MainActivity : ComponentActivity() {
             }
             Spacer(Modifier.height(4.dp))
             Text(text = note.content, style = MaterialTheme.typography.bodyMedium)
+
+            Spacer(Modifier.height(4.dp))
+            Text("Data: $formattedDate")
+
+            Spacer(Modifier.height(4.dp))
+            Text("Tarefas: ${note.tags.joinToString()}")
         }
     }
 }
