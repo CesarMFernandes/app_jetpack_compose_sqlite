@@ -9,6 +9,4 @@
   <li>Alter</li>
 </ul>
 
-<video controls>
-  <source src="sqlitevideo.mp4" type="video/mp4">
-</video>
+<p>Vídeo: https://www.youtube.com/watch?v=80-zlKHhZzI</p>
